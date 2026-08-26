@@ -1,0 +1,216 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Nunito', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fredoka', 'Nunito', ui-sans-serif, system-ui, sans-serif;
+  --color-primary-50: #ecfdf5;
+  --color-primary-100: #d1fae5;
+  --color-primary-200: #a7f3d0;
+  --color-primary-300: #6ee7b7;
+  --color-primary-400: #34d399;
+  --color-primary-500: #10b981;
+  --color-primary-600: #059669;
+  --color-primary-700: #047857;
+  --color-primary-800: #065f46;
+  --color-primary-900: #064e3b;
+  --color-mint: #a7f3d0;
+  --color-cream: #faf6ef;
+  --color-warm-yellow: #fbbf24;
+  --color-coral: #fb7185;
+  --color-surface: #faf6ef;
+  --color-surface-elevated: #ffffff;
+  --color-ink: #1c1917;
+  --color-ink-muted: #57534e;
+  --color-border: #e7e5e4;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-success: #059669;
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.06), 0 1px 3px rgb(28 25 23 / 0.04);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: var(--color-surface);
+    --fg: var(--color-ink);
+    --muted: var(--color-ink-muted);
+    --card: var(--color-surface-elevated);
+    --line: var(--color-border);
+    --focus: var(--color-primary-600);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    font-feature-settings: 'tnum' 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .app-shell {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    border-radius: 0.625rem;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    line-height: 1.25;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-primary-600);
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-primary-700);
+  }
+
+  .btn-secondary {
+    background: white;
+    color: var(--fg);
+    border-color: var(--line);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: #f5f5f4;
+  }
+
+  .btn-danger {
+    background: var(--color-danger);
+    color: white;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: #f5f5f4;
+    color: var(--fg);
+  }
+
+  .input,
+  .select,
+  .textarea {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.625rem;
+    background: white;
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+  }
+
+  .textarea {
+    min-height: 96px;
+    resize: vertical;
+  }
+
+  .label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--fg);
+    margin-bottom: 0.375rem;
+  }
+
+  .field-error {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--color-danger);
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #f5f5f4 25%, #e7e5e4 50%, #f5f5f4 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+      background: #e7e5e4;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .auth-panel {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 20%, rgb(167 243 208 / 0.45), transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 80%, rgb(251 191 36 / 0.18), transparent 60%),
+      var(--color-cream);
+  }
+}
