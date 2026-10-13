@@ -18,11 +18,22 @@ import { DEFAULT_TIMEZONE } from './money'
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly'
 
-export function nowInManila(date: Date = new Date()): Date {
+/**
+ * The demo's fixed "today" (Asia/Manila). The sample data covers June–August
+ * 2026, so every page, default date and recurring run treats this as today.
+ */
+export const DEMO_TODAY = '2026-08-31'
+
+/** The demo's current instant: midday on DEMO_TODAY in Asia/Manila. */
+export function demoNow(): Date {
+  return fromZonedTime(`${DEMO_TODAY}T12:00:00`, DEFAULT_TIMEZONE)
+}
+
+export function nowInManila(date: Date = demoNow()): Date {
   return toZonedTime(date, DEFAULT_TIMEZONE)
 }
 
-export function todayIsoDate(date: Date = new Date()): string {
+export function todayIsoDate(date: Date = demoNow()): string {
   return format(nowInManila(date), 'yyyy-MM-dd')
 }
 
@@ -119,7 +130,7 @@ export function generateOccurrences(params: {
   return results
 }
 
-export function currentMonthRange(date: Date = new Date()): { start: string; end: string } {
+export function currentMonthRange(date: Date = demoNow()): { start: string; end: string } {
   const zoned = nowInManila(date)
   const start = startOfMonth(zoned)
   const end = endOfMonth(zoned)
@@ -181,7 +192,7 @@ export function nextDueOccurrence(params: {
   return format(cursor, 'yyyy-MM-dd')
 }
 
-export function lastNMonths(n: number, date: Date = new Date()): string[] {
+export function lastNMonths(n: number, date: Date = demoNow()): string[] {
   const zoned = nowInManila(date)
   const keys: string[] = []
   for (let i = n - 1; i >= 0; i -= 1) {

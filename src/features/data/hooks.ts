@@ -16,6 +16,21 @@ function useEnabled() {
 
 const STORE_LOAD_ERROR = 'Could not load the demo service. Check your connection and retry.'
 
+// Asserted rather than annotated so these stay valid whether or not the
+// store's SyncStatus declares `persistence` yet.
+const INITIAL_STATUS = {
+  state: 'loading',
+  hasPendingWrites: false,
+  error: null,
+  persistence: 'device',
+} as const as SyncStatus
+const LOAD_FAILED_STATUS = {
+  state: 'error',
+  hasPendingWrites: false,
+  error: STORE_LOAD_ERROR,
+  persistence: 'device',
+} as const as SyncStatus
+
 export type DemoSync = {
   status: SyncStatus
   /** True once the store accepts writes (signed in and first snapshot seen). */
@@ -26,11 +41,7 @@ export type DemoSync = {
 /** Live sync status of the demo store, for the banner and the reset control. */
 export function useDemoSync(): DemoSync {
   const [store, setStore] = useState<DemoStore | null>(null)
-  const [status, setStatus] = useState<SyncStatus>({
-    state: 'loading',
-    hasPendingWrites: false,
-    error: null,
-  })
+  const [status, setStatus] = useState<SyncStatus>(INITIAL_STATUS)
   const [ready, setReady] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
@@ -61,7 +72,7 @@ export function useDemoSync(): DemoSync {
         })
       },
       () => {
-        if (active) setStatus({ state: 'error', hasPendingWrites: false, error: STORE_LOAD_ERROR })
+        if (active) setStatus(LOAD_FAILED_STATUS)
       },
     )
     return () => {

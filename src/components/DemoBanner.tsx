@@ -1,7 +1,14 @@
 import { useDemoSync } from '@/features/data/hooks'
+import type { SyncStatus } from '@/data/store'
 
 const LOADING_MESSAGE = 'Loading your saved changes…'
 const OFFLINE_MESSAGE = 'Offline: changes are saved on this device and will sync'
+const MEMORY_MESSAGE = 'Changes may not survive a reload in this browser.'
+
+/** True when the store fell back to an in-memory cache (no IndexedDB). */
+function isMemoryOnly(status: SyncStatus): boolean {
+  return (status as SyncStatus & { persistence?: 'device' | 'memory' }).persistence === 'memory'
+}
 
 const noticeClass =
   'pointer-events-auto mx-auto flex max-w-md items-center justify-center gap-3 rounded-full px-4 py-2 text-center text-xs font-semibold shadow-md'
@@ -10,21 +17,27 @@ const noticeClass =
 function SyncNotice() {
   const { status, retry } = useDemoSync()
 
-  const message =
+  const syncMessage =
     status.state === 'loading'
       ? LOADING_MESSAGE
       : status.state === 'offline' && status.hasPendingWrites
         ? OFFLINE_MESSAGE
         : null
+  const messages = [syncMessage, isMemoryOnly(status) ? MEMORY_MESSAGE : null].filter(
+    (text): text is string => text !== null,
+  )
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[4.5rem] z-40 px-4 md:bottom-4">
-      <div role="status">
-        {message ? (
-          <p className={`${noticeClass} border border-[var(--line)] bg-white text-[var(--fg)]`}>
-            {message}
+    <div className="pointer-events-none fixed inset-x-0 bottom-[4.5rem] z-40 space-y-2 px-4 md:bottom-4">
+      <div role="status" className="space-y-2">
+        {messages.map((text) => (
+          <p
+            key={text}
+            className={`${noticeClass} border border-[var(--line)] bg-[var(--card)] text-[var(--fg)]`}
+          >
+            {text}
           </p>
-        ) : null}
+        ))}
       </div>
       {status.state === 'error' ? (
         <div className={`${noticeClass} border border-red-200 bg-red-50 text-red-800`} role="alert">

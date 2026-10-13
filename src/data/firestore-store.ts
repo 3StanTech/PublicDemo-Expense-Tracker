@@ -2,9 +2,11 @@ import {
   collection as collectionRef,
   doc,
   getDocsFromCache,
+  getDocsFromServer,
   increment,
   onSnapshot,
   serverTimestamp,
+  waitForPendingWrites,
   writeBatch,
   type DocumentData,
   type DocumentReference,
@@ -19,6 +21,7 @@ import {
   type LocalCollection,
   type LocalEntityByCollection,
   type LocalRecord,
+  type Persistence,
   type SyncStatus,
 } from '@/data/local-store'
 
@@ -78,6 +81,31 @@ function compareIds(a: { id: string }, b: { id: string }): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+/**
+ * Whether this browser can keep Firestore's cache in IndexedDB. When it cannot,
+ * the SDK falls back to a memory cache and unsent changes are lost on reload.
+ */
+function probePersistence(): Promise<Persistence> {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve('memory')
+      return
+    }
+    try {
+      const name = 'fundsicles-persistence-probe'
+      const request = indexedDB.open(name)
+      request.addEventListener('success', () => {
+        request.result.close()
+        indexedDB.deleteDatabase(name)
+        resolve('device')
+      })
+      request.addEventListener('error', () => resolve('memory'))
+    } catch {
+      resolve('memory')
+    }
+  })
+}
+
 function isBrowserOffline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false
 }
@@ -112,7 +140,6 @@ export class FirestoreStore implements DemoStore {
   private readonly seed = new Map<LocalCollection, Map<string, LocalRecord>>()
   /** Change documents by key, as of the latest snapshot (or the cache before it). */
   private changes = new Map<string, ChangeEntry>()
-  private readonly cacheLoaded: Promise<void>
   private readyPromise: Promise<void>
   private connection: Connection | null = null
   private connecting: Promise<Connection> | null = null
@@ -123,7 +150,13 @@ export class FirestoreStore implements DemoStore {
   private fromCache = true
   private hasPendingWrites = false
   private error: string | null = null
-  private status: SyncStatus = { state: 'loading', hasPendingWrites: false, error: null }
+  private persistence: Persistence = 'device'
+  private status: SyncStatus = {
+    state: 'loading',
+    hasPendingWrites: false,
+    error: null,
+    persistence: 'device',
+  }
   /** Resolvers for writes waiting to show up in the local cache, by change key. */
   private readonly applyWaiters = new Map<string, () => void>()
   /** Serializes writes so each batch sees the counters left by the one before. */
@@ -137,8 +170,12 @@ export class FirestoreStore implements DemoStore {
     for (const name of LOCAL_COLLECTIONS) {
       this.seed.set(name, new Map(seed[name].map((row) => [row.id, row as LocalRecord])))
     }
-    this.cacheLoaded = this.loadCachedChanges()
     this.readyPromise = this.startReady()
+    void this.loadCachedChanges()
+    void probePersistence().then((persistence) => {
+      this.persistence = persistence
+      this.updateStatus()
+    })
     if (typeof window !== 'undefined') {
       window.addEventListener('online', this.handleNetworkChange)
       window.addEventListener('offline', this.handleNetworkChange)
@@ -153,8 +190,12 @@ export class FirestoreStore implements DemoStore {
     return this.status
   }
 
+  /*
+   * Reads never wait for Auth or the network: they answer from the sample data
+   * and the changes known so far, and subscribers are told when the cache or a
+   * server snapshot brings more.
+   */
   async list<C extends LocalCollection>(collection: C): Promise<LocalEntityByCollection[C][]> {
-    await this.cacheLoaded
     const rows = new Map(this.seed.get(collection))
     for (const change of this.changes.values()) {
       if (change.collection !== collection) continue
@@ -168,7 +209,6 @@ export class FirestoreStore implements DemoStore {
     collection: C,
     id: string,
   ): Promise<LocalEntityByCollection[C] | null> {
-    await this.cacheLoaded
     const change = this.changes.get(changeKey(collection, id))
     const value = change
       ? change.deleted
@@ -220,14 +260,18 @@ export class FirestoreStore implements DemoStore {
   retrySync(): void {
     if (this.closed) return
     this.error = null
-    this.updateStatus()
+    // Replace the promise before notifying, so listeners read the new attempt.
     this.readyPromise = this.startReady()
+    this.updateStatus()
   }
 
   /**
-   * Deletes every change document, a batch at a time; each batch also bumps
-   * the profile's `writes`. The profile and its counters stay, so a reset does
-   * not refill the write budget. Waits for the server so failures surface.
+   * Deletes every change document the server holds, a batch at a time; each
+   * batch also bumps the profile's `writes`. The list comes from the server
+   * after this device's pending writes are acknowledged, so changes made in
+   * other tabs or still in flight are included. The profile and its counters
+   * stay, so a reset does not refill the write budget. Waits for the server so
+   * failures surface.
    */
   async clearVisitorData(): Promise<void> {
     if (isBrowserOffline()) throw new Error(RESET_OFFLINE_ERROR)
@@ -235,7 +279,11 @@ export class FirestoreStore implements DemoStore {
     await this.serialize(async () => {
       const { db } = getFirebase()
       const connection = this.requireConnection()
-      const keys = [...this.changes.keys()]
+      await waitForPendingWrites(db)
+      const snapshot = await getDocsFromServer(
+        collectionRef(db, 'demos', connection.uid, 'changes'),
+      )
+      const keys = snapshot.docs.map((change) => change.id)
       for (let start = 0; start < keys.length; start += RESET_BATCH_SIZE) {
         const batch = writeBatch(db)
         for (const key of keys.slice(start, start + RESET_BATCH_SIZE)) {
@@ -267,8 +315,9 @@ export class FirestoreStore implements DemoStore {
       const { db } = getFirebase()
       const snapshot = await getDocsFromCache(collectionRef(db, 'demos', uid, 'changes'))
       // A listener snapshot may already have landed; it is newer than this read.
-      if (this.hasAnySnapshot) return
+      if (this.hasAnySnapshot || snapshot.empty) return
       this.changes = this.entriesFrom(snapshot)
+      this.emitData()
     } catch {
       // No usable cache: the sample data shows until the first snapshot lands,
       // and the connection attempt reports the failure in the sync status.
@@ -277,9 +326,15 @@ export class FirestoreStore implements DemoStore {
 
   private startReady(): Promise<void> {
     const ready = withTimeout(this.connect(), READY_TIMEOUT_MS).then(
-      () => undefined,
+      () => {
+        // Tell listeners the attempt settled, even when the status is unchanged.
+        if (this.readyPromise === ready) this.updateStatus(true)
+      },
       (error: unknown) => {
-        this.fail(CONNECT_ERROR)
+        if (this.readyPromise === ready) {
+          this.error = CONNECT_ERROR
+          this.updateStatus(true)
+        }
         throw error
       },
     )
@@ -452,7 +507,7 @@ export class FirestoreStore implements DemoStore {
     this.updateStatus()
   }
 
-  private updateStatus(): void {
+  private updateStatus(force = false): void {
     const state = this.error
       ? 'error'
       : !this.fromCache
@@ -460,10 +515,17 @@ export class FirestoreStore implements DemoStore {
         : this.hasServerSnapshot || isBrowserOffline()
           ? 'offline'
           : 'loading'
-    const next: SyncStatus = { state, hasPendingWrites: this.hasPendingWrites, error: this.error }
+    const next: SyncStatus = {
+      state,
+      hasPendingWrites: this.hasPendingWrites,
+      error: this.error,
+      persistence: this.persistence,
+    }
     const current = this.status
     if (
+      !force &&
       current.state === next.state &&
+      current.persistence === next.persistence &&
       current.hasPendingWrites === next.hasPendingWrites &&
       current.error === next.error
     ) {

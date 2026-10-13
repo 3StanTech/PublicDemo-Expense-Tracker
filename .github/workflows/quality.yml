@@ -59,8 +59,11 @@ jobs:
       - name: Firestore rules
         run: npm run test:rules
 
-      - name: E2E smoke
-        run: npm run test:e2e
+      # Production code built in emulator mode (VITE_FIREBASE_EMULATORS=1): local
+      # Auth and Firestore emulators with firestore.rules, no App Check and no
+      # live sign-ups.
+      - name: E2E smoke (emulators)
+        run: npm run test:e2e:emulators
 
       - name: Upload Playwright report
         if: failure()

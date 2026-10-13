@@ -1,7 +1,8 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
-import { getAuth, signInAnonymously, type Auth } from 'firebase/auth'
+import { connectAuthEmulator, getAuth, signInAnonymously, type Auth } from 'firebase/auth'
 import {
+  connectFirestoreEmulator,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
@@ -17,10 +18,19 @@ import {
  */
 const env = import.meta.env
 
+/**
+ * Build flag for end-to-end tests: talk to the local Auth and Firestore
+ * emulators under a `demo-` project (which never reaches a real project) and
+ * skip App Check.
+ */
+const useEmulators = import.meta.env.VITE_FIREBASE_EMULATORS === '1'
+
 export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyA02jypiK-CliI8RswM6jFJ_ShAyvJbgB8',
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'fundsicles-demo.firebaseapp.com',
-  projectId: env.VITE_FIREBASE_PROJECT_ID || 'fundsicles-demo',
+  projectId: useEmulators
+    ? 'demo-fundsicles-e2e'
+    : env.VITE_FIREBASE_PROJECT_ID || 'fundsicles-demo',
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'fundsicles-demo.firebasestorage.app',
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '363073625788',
   appId: env.VITE_FIREBASE_APP_ID || '1:363073625788:web:209c3c93e4b628c99c7ab9',
@@ -64,15 +74,21 @@ export function getFirebase(): FirebaseServices {
   }
 
   const app = initializeApp(firebaseConfig)
-  initializeAppCheck(app, {
-    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
-    isTokenAutoRefreshEnabled: true,
-  })
+  if (!useEmulators) {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    })
+  }
   const auth = getAuth(app)
   const db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     ignoreUndefinedProperties: true,
   })
+  if (useEmulators) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+    connectFirestoreEmulator(db, '127.0.0.1', 8080)
+  }
   services = { app, auth, db }
   return services
 }

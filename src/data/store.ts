@@ -1,6 +1,6 @@
 import { closeLocalStore, getLocalStore, type DemoStore } from '@/data/local-store'
 
-export type { DemoStore, SyncState, SyncStatus } from '@/data/local-store'
+export type { DemoStore, Persistence, SyncState, SyncStatus } from '@/data/local-store'
 
 let storePromise: Promise<DemoStore> | null = null
 

@@ -89,12 +89,19 @@ export function seedRows(): { [C in LocalCollection]: LocalEntityByCollection[C]
  */
 export type SyncState = 'loading' | 'synced' | 'offline' | 'error'
 
+/**
+ * Where Firestore keeps its cache: `device` (IndexedDB, survives a reload) or
+ * `memory` (this browser cannot persist it, so unsent changes are lost on reload).
+ */
+export type Persistence = 'device' | 'memory'
+
 export type SyncStatus = {
   state: SyncState
   /** Writes applied on this device that the server has not acknowledged yet. */
   hasPendingWrites: boolean
   /** Visitor-facing reason when `state` is `error`. */
   error: string | null
+  persistence: Persistence
 }
 
 /** Storage surface used by the repositories and the demo UI. */
@@ -124,7 +131,12 @@ export interface DemoStore {
   close(): Promise<void>
 }
 
-const SYNCED: SyncStatus = { state: 'synced', hasPendingWrites: false, error: null }
+const SYNCED: SyncStatus = {
+  state: 'synced',
+  hasPendingWrites: false,
+  error: null,
+  persistence: 'device',
+}
 
 const memoryStores = new Map<LocalCollection, Map<string, LocalRecord>>()
 
