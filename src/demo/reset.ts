@@ -1,7 +1,10 @@
-import { LOCAL_DATABASE_NAME, closeLocalStore } from '@/data/local-store'
+import { LOCAL_DATABASE_NAME } from '@/data/local-store'
+import { closeStore, getStore } from '@/data/store'
 
 export type ResetDemoDataOptions = {
-  /** Close the open local store before deleting the database. */
+  /** Remove the visitor's saved changes (defaults to the app store's). */
+  clearVisitorData?: () => Promise<void>
+  /** Close the open store before deleting the old local database. */
   closeStore?: () => Promise<void>
   /** Override IndexedDB deletion (tests). */
   deleteDatabase?: (name: string) => Promise<void>
@@ -25,12 +28,21 @@ function defaultDeleteDatabase(name: string): Promise<void> {
   })
 }
 
+async function defaultClearVisitorData(): Promise<void> {
+  const store = await getStore()
+  await store.clearVisitorData()
+}
+
 /**
- * Closes local storage, deletes the IndexedDB database, and reloads so
- * getLocalStore() re-seeds sample data from scratch.
+ * Removes the visitor's saved changes (waiting for the server), closes the
+ * store, deletes the earlier local-only demo database, and reloads so the
+ * sample data shows from scratch. Throws if the changes could not be removed.
  */
 export async function resetDemoData(options: ResetDemoDataOptions = {}): Promise<void> {
-  const close = options.closeStore ?? closeLocalStore
+  const clear = options.clearVisitorData ?? defaultClearVisitorData
+  await clear()
+
+  const close = options.closeStore ?? closeStore
   await close()
 
   const deleteDatabase = options.deleteDatabase ?? defaultDeleteDatabase

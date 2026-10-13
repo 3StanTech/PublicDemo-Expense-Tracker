@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { profileFormSchema } from '@/schemas/forms'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { useProfile } from '@/features/data/hooks'
+import { useDemoSync, useProfile } from '@/features/data/hooks'
 import { updateProfile } from '@/features/data/repositories'
 import { resetDemoData } from '@/demo/reset'
 import { PageHeader, LoadingSkeleton } from '@/components/ui/States'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { ConfirmDialog } from '@/components/ui/Dialog'
 import { getErrorMessage } from '@/lib/errors'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-client'
@@ -25,12 +26,14 @@ const moreLinks = [
 export function SettingsPage() {
   const { user, signOut } = useAuth()
   const profile = useProfile()
+  const sync = useDemoSync()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [message, setMessage] = useState<string | null>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
   const [resetError, setResetError] = useState<string | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   type ProfileInput = z.infer<typeof profileFormSchema>
   const form = useForm<ProfileInput>({
@@ -57,10 +60,23 @@ export function SettingsPage() {
     navigate('/login', { replace: true })
   }
 
+  function openResetDialog() {
+    setResetError(null)
+    setConfirmReset(true)
+  }
+
+  // Stable so the dialog's focus handling does not re-run on every render.
+  const closeResetDialog = useCallback(() => {
+    if (resetting) return
+    setConfirmReset(false)
+    setResetError(null)
+  }, [resetting])
+
   async function handleResetDemo() {
     setResetError(null)
     setResetting(true)
     try {
+      // Clears the saved changes on the demo service, then reloads the page.
       await resetDemoData()
     } catch (e) {
       setResetting(false)
@@ -114,7 +130,7 @@ export function SettingsPage() {
             </dl>
             {profile.error ? (
               <p className="text-sm text-[var(--muted)]" role="status">
-                Demo profile store is still loading locally — defaults shown above.
+                Demo profile is still loading — defaults shown above.
               </p>
             ) : null}
             {message ? (
@@ -148,27 +164,46 @@ export function SettingsPage() {
           Demo data
         </h2>
         <p className="mb-3 text-sm text-[var(--muted)]">
-          Restores the fictional sample budget on this device. Changes you made in this browser are
-          discarded.
+          Removes the changes saved in this browser&apos;s private demo space and restores the
+          fictional sample budget.
         </p>
-        {resetError ? (
-          <p className="mb-3 field-error" role="alert">
-            {resetError}
-          </p>
-        ) : null}
-        <Button variant="danger" disabled={resetting} onClick={() => void handleResetDemo()}>
+        <Button
+          variant="danger"
+          disabled={!sync.ready || resetting}
+          aria-describedby={sync.ready ? undefined : 'reset-unavailable'}
+          onClick={openResetDialog}
+        >
           {resetting ? 'Resetting…' : 'Reset demo data'}
         </Button>
+        {sync.ready ? null : (
+          <p id="reset-unavailable" className="mt-2 text-sm text-[var(--muted)]">
+            {sync.status.state === 'error'
+              ? 'Reset is unavailable until the demo service reconnects.'
+              : 'Reset is available once your demo space has loaded.'}
+          </p>
+        )}
       </section>
+
+      <ConfirmDialog
+        open={confirmReset}
+        title="Reset demo data?"
+        message="This removes every change saved in this browser's private demo space and reloads the page with the fictional sample data."
+        confirmLabel="Reset demo data"
+        onConfirm={() => void handleResetDemo()}
+        onClose={closeResetDialog}
+        loading={resetting}
+        error={resetError}
+      />
 
       <section className="card mt-4 p-4" aria-labelledby="about-heading">
         <h2 id="about-heading" className="mb-2 text-base font-semibold">
           About Fundsicles
         </h2>
         <p className="text-sm text-[var(--muted)]">
-          Public local-only demo. Fictional PHP sample data is persisted only in this browser — not
-          on a hosted account. Integer-centavo math, no bank sync, no shared households. The PIN
-          entry gate ships in the client and is not security.
+          Public demo. Every visitor starts from the same fictional PHP sample data; your changes
+          are saved to a private, anonymous demo space for this browser — not a real account.
+          Integer-centavo math, no bank sync, no shared households. The PIN entry gate ships in the
+          client and is not security.
         </p>
       </section>
     </div>

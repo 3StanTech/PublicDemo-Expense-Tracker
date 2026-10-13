@@ -155,8 +155,15 @@ if (process.env.VITEST) {
       await page.goto('/app/settings')
       await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
       await page.getByRole('button', { name: /Reset demo data/i }).click()
+      // resetDemoData clears the saved changes on the server, then reloads the
+      // current route; wait for that reload before navigating away.
+      const reloaded = page.waitForEvent('load', { timeout: 15_000 })
+      await page
+        .getByRole('dialog', { name: 'Reset demo data?' })
+        .getByRole('button', { name: 'Reset demo data' })
+        .click()
+      await reloaded
 
-      // resetDemoData closes storage, deletes IndexedDB, then reloads the current route
       await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({
         timeout: 15_000,
       })

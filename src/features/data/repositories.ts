@@ -1,6 +1,6 @@
 import { endOfMonth, format, parseISO } from 'date-fns'
 import { DEMO_USER_ID } from '@/demo/seed'
-import { getLocalStore } from '@/data/local-store'
+import { getStore as getLocalStore } from '@/data/store'
 import {
   categorySpending,
   computeAccountBalance,
@@ -9,6 +9,7 @@ import {
   monthlyCashFlow,
 } from '@/lib/finance'
 import {
+  DEMO_TODAY,
   generateOccurrences,
   monthDateBounds,
   monthKey,
@@ -735,19 +736,25 @@ export async function fetchNetWorthHistory(): Promise<NetWorthPoint[]> {
     store.list('transactions'),
   ])
 
+  // Records are stamped with the real clock; the demo's calendar stops at
+  // DEMO_TODAY, so an account created later counts as created on that day.
+  const createdOnFor = (a: Account): string => {
+    const createdOn = manilaDateFromIso(a.createdAt)
+    return createdOn > DEMO_TODAY ? DEMO_TODAY : createdOn
+  }
+
   const asOfSet = new Set<string>()
   for (const t of txs) {
     if (t.status === 'posted') asOfSet.add(monthEndIso(t.occurredOn))
   }
   for (const a of accounts) {
-    asOfSet.add(monthEndIso(manilaDateFromIso(a.createdAt)))
+    asOfSet.add(monthEndIso(createdOnFor(a)))
   }
 
   const points: NetWorthPoint[] = []
   for (const asOf of [...asOfSet].sort()) {
     const included = accounts.filter((a) => {
-      const createdOn = manilaDateFromIso(a.createdAt)
-      if (createdOn > asOf) return false
+      if (createdOnFor(a) > asOf) return false
       if (a.archivedAt) {
         const archivedOn = manilaDateFromIso(a.archivedAt)
         if (archivedOn <= asOf) return false

@@ -95,7 +95,7 @@ export function LoginPage() {
   return (
     <AuthLayout
       title="Make your money make sense"
-      subtitle="Unlock this public local demo to explore the sample budget."
+      subtitle="Unlock this public demo to explore the sample budget."
     >
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <Input
@@ -105,13 +105,14 @@ export function LoginPage() {
           autoComplete="current-password"
           pattern="[0-9]*"
           className="text-center tracking-[0.3em]"
-          hint={`Public local-only demo — PIN ${DEMO_PIN} ships in the client and is not security.`}
+          hint={`Public demo — PIN ${DEMO_PIN} ships in the client and is not security.`}
           error={form.formState.errors.pin?.message}
           {...form.register('pin')}
         />
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-          This is a presentation demo. Fictional PHP sample data stays in this browser only. The PIN
-          is an entry gate, not authentication — anyone can read it from the shipped client.
+          This is a presentation demo with fictional PHP sample data; your changes are saved to a
+          private demo space for this browser. The PIN is an entry gate, not authentication — anyone
+          can read it from the shipped client.
         </p>
         {serverError ? (
           <p className="field-error" role="alert">

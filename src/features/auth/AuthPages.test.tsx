@@ -49,7 +49,7 @@ describe('PIN login page', () => {
     renderLogin()
     expect(screen.getByRole('heading', { name: 'Make your money make sense' })).toBeInTheDocument()
     expect(
-      screen.getByText('Unlock this public local demo to explore the sample budget.'),
+      screen.getByText('Unlock this public demo to explore the sample budget.'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Your money, made clear.').length).toBeGreaterThan(0)
     expect(screen.getByText('Fundsicles')).toBeInTheDocument()
