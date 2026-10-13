@@ -1,6 +1,8 @@
+import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-client'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { getStore, type DemoStore, type SyncStatus } from '@/data/store'
 import * as repo from './repositories'
 import { monthKey, nextDueOccurrence, todayIsoDate } from '@/lib/dates'
 import { computeNetWorth } from '@/lib/finance'
@@ -10,6 +12,96 @@ import type { Account, RecurringRule } from '@/types/domain'
 function useEnabled() {
   const { user, configured } = useAuth()
   return Boolean(user && configured)
+}
+
+const STORE_LOAD_ERROR = 'Could not load the demo service. Check your connection and retry.'
+
+export type DemoSync = {
+  status: SyncStatus
+  /** True once the store accepts writes (signed in and first snapshot seen). */
+  ready: boolean
+  retry: () => void
+}
+
+/** Live sync status of the demo store, for the banner and the reset control. */
+export function useDemoSync(): DemoSync {
+  const [store, setStore] = useState<DemoStore | null>(null)
+  const [status, setStatus] = useState<SyncStatus>({
+    state: 'loading',
+    hasPendingWrites: false,
+    error: null,
+  })
+  const [ready, setReady] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    let unsubscribe: (() => void) | undefined
+    // `ready` is replaced on every retry, so read it fresh after each status change.
+    const watchReady = (current: DemoStore) => {
+      current.ready.then(
+        () => {
+          if (active) setReady(true)
+        },
+        () => {
+          if (active) setReady(false)
+        },
+      )
+    }
+    getStore().then(
+      (current) => {
+        if (!active) return
+        setStore(current)
+        setStatus(current.syncStatus)
+        watchReady(current)
+        unsubscribe = current.subscribeSyncStatus((next) => {
+          if (!active) return
+          setStatus(next)
+          watchReady(current)
+        })
+      },
+      () => {
+        if (active) setStatus({ state: 'error', hasPendingWrites: false, error: STORE_LOAD_ERROR })
+      },
+    )
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [attempt])
+
+  const retry = useCallback(() => {
+    if (store) store.retrySync()
+    else setAttempt((n) => n + 1)
+  }, [store])
+
+  return { status, ready, retry }
+}
+
+/**
+ * Refetches every query when the store reports data changed outside this
+ * tab's own awaited writes (another tab, or the server rolling a write back).
+ */
+export function useRemoteChangeRefresh() {
+  const enabled = useEnabled()
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    if (!enabled) return
+    let active = true
+    let unsubscribe: (() => void) | undefined
+    getStore().then(
+      (store) => {
+        if (active) unsubscribe = store.subscribe(() => void qc.invalidateQueries())
+      },
+      // The queries surface a failed store load themselves.
+      () => undefined,
+    )
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [enabled, qc])
 }
 
 export function useProfile() {

@@ -22,7 +22,11 @@ import type {
   Transaction,
 } from '@/types/domain'
 
-/** IndexedDB database name — also used by demo reset. */
+/**
+ * IndexedDB database name of the local store. The browser build now keeps data
+ * in Firestore; demo reset still deletes this database so data saved by the
+ * earlier local-only demo does not linger.
+ */
 export const LOCAL_DATABASE_NAME = 'fundsicles-public-demo'
 
 export type LocalCollection =
@@ -48,9 +52,9 @@ export type LocalEntityByCollection = {
   debts: Debt
 }
 
-type LocalRecord = LocalEntityByCollection[LocalCollection]
+export type LocalRecord = LocalEntityByCollection[LocalCollection]
 
-const stores: LocalCollection[] = [
+export const LOCAL_COLLECTIONS: readonly LocalCollection[] = [
   'profiles',
   'categories',
   'accounts',
@@ -62,13 +66,76 @@ const stores: LocalCollection[] = [
   'debts',
 ]
 
+/** Sample rows every visitor starts from, per collection. */
+export function seedRows(): { [C in LocalCollection]: LocalEntityByCollection[C][] } {
+  return {
+    profiles: [demoProfile],
+    categories: demoCategories,
+    accounts: demoAccounts,
+    transactions: demoTransactions,
+    budgets: demoBudgets,
+    recurringRules: demoRecurringRules,
+    savingsGoals: demoSavingsGoals,
+    goalContributions: demoGoalContributions,
+    debts: demoDebts,
+  }
+}
+
+/**
+ * - `loading`: no server snapshot yet (sample data and cached changes are shown).
+ * - `synced`: the latest snapshot came from the server.
+ * - `offline`: working from the device cache; writes sync when back online.
+ * - `error`: sign-in, the listener or a write failed; `retrySync()` tries again.
+ */
+export type SyncState = 'loading' | 'synced' | 'offline' | 'error'
+
+export type SyncStatus = {
+  state: SyncState
+  /** Writes applied on this device that the server has not acknowledged yet. */
+  hasPendingWrites: boolean
+  /** Visitor-facing reason when `state` is `error`. */
+  error: string | null
+}
+
+/** Storage surface used by the repositories and the demo UI. */
+export interface DemoStore {
+  /** Resolves when writes can be accepted (signed in and first snapshot seen). */
+  readonly ready: Promise<void>
+  readonly syncStatus: SyncStatus
+  list<C extends LocalCollection>(collection: C): Promise<LocalEntityByCollection[C][]>
+  get<C extends LocalCollection>(
+    collection: C,
+    id: string,
+  ): Promise<LocalEntityByCollection[C] | null>
+  put<C extends LocalCollection>(
+    collection: C,
+    entity: LocalEntityByCollection[C],
+  ): Promise<LocalEntityByCollection[C]>
+  remove<C extends LocalCollection>(
+    collection: C,
+    id: string,
+  ): Promise<LocalEntityByCollection[C] | null>
+  /** Called when stored data changed outside the caller's own awaited writes. */
+  subscribe(listener: () => void): () => void
+  subscribeSyncStatus(listener: (status: SyncStatus) => void): () => void
+  retrySync(): void
+  /** Removes every visitor change so the sample data shows again. */
+  clearVisitorData(): Promise<void>
+  close(): Promise<void>
+}
+
+const SYNCED: SyncStatus = { state: 'synced', hasPendingWrites: false, error: null }
+
 const memoryStores = new Map<LocalCollection, Map<string, LocalRecord>>()
 
 function clone<T>(value: T): T {
   return structuredClone(value)
 }
 
-export class LocalStore {
+/** IndexedDB (or in-memory) store with no sync; used by the test suite. */
+export class LocalStore implements DemoStore {
+  readonly ready: Promise<void> = Promise.resolve()
+  readonly syncStatus: SyncStatus = SYNCED
   private readonly database: IDBPDatabase | null
   private closed = false
 
@@ -82,7 +149,7 @@ export class LocalStore {
         ? null
         : await openDB(LOCAL_DATABASE_NAME, 1, {
             upgrade(db) {
-              for (const store of stores) {
+              for (const store of LOCAL_COLLECTIONS) {
                 if (!db.objectStoreNames.contains(store)) {
                   db.createObjectStore(store, { keyPath: 'id' })
                 }
@@ -96,15 +163,10 @@ export class LocalStore {
 
   private async seedIfEmpty(): Promise<void> {
     if ((await this.list('profiles')).length > 0) return
-    await this.put('profiles', demoProfile, false)
-    for (const row of demoCategories) await this.put('categories', row, false)
-    for (const row of demoAccounts) await this.put('accounts', row, false)
-    for (const row of demoTransactions) await this.put('transactions', row, false)
-    for (const row of demoBudgets) await this.put('budgets', row, false)
-    for (const row of demoRecurringRules) await this.put('recurringRules', row, false)
-    for (const row of demoSavingsGoals) await this.put('savingsGoals', row, false)
-    for (const row of demoGoalContributions) await this.put('goalContributions', row, false)
-    for (const row of demoDebts) await this.put('debts', row, false)
+    const seed = seedRows()
+    for (const collection of LOCAL_COLLECTIONS) {
+      for (const row of seed[collection]) await this.put(collection, row, false)
+    }
   }
 
   async list<C extends LocalCollection>(collection: C): Promise<LocalEntityByCollection[C][]> {
@@ -155,6 +217,25 @@ export class LocalStore {
     if (this.database) await this.database.delete(collection, id)
     else memoryStores.get(collection)?.delete(id)
     return existing
+  }
+
+  subscribe(_listener: () => void): () => void {
+    return () => undefined
+  }
+
+  subscribeSyncStatus(_listener: (status: SyncStatus) => void): () => void {
+    return () => undefined
+  }
+
+  retrySync(): void {}
+
+  async clearVisitorData(): Promise<void> {
+    this.assertOpen()
+    for (const collection of LOCAL_COLLECTIONS) {
+      if (this.database) await this.database.clear(collection)
+      else memoryStores.delete(collection)
+    }
+    await this.seedIfEmpty()
   }
 
   async close(): Promise<void> {

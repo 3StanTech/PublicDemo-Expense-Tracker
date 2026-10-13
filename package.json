@@ -8,16 +8,17 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --pretty false",
-    "lint": "oxlint src e2e scripts",
+    "typecheck": "tsc -b --pretty false && tsc -p tests/rules --pretty false",
+    "lint": "oxlint src e2e scripts tests vitest.rules.config.ts",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.{ts,tsx}\" \"*.{json,md,ts,html}\"",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.{ts,tsx}\" \"*.{json,md,ts,html}\"",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --exclude \"tests/rules/**\"",
+    "test:watch": "vitest --exclude \"tests/rules/**\"",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-fundsicles-rules \"vitest run -c vitest.rules.config.ts\"",
     "test:e2e": "playwright test",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:public-safe": "node scripts/check-public-safe.mjs",
-    "check": "npm run lint && npm test && npm run build && npm run check:bundle && npm run check:public-safe && npm run test:e2e"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundle && npm run check:public-safe && npm run test:e2e"
   },
   "dependencies": {
     "@fontsource/fredoka": "5.2.8",
@@ -26,6 +27,7 @@
     "@tanstack/react-query": "5.89.0",
     "date-fns": "4.1.0",
     "date-fns-tz": "3.2.0",
+    "firebase": "^12.19.0",
     "idb": "^8.0.3",
     "react": "19.1.1",
     "react-dom": "19.1.1",
@@ -35,6 +37,7 @@
     "zod": "4.1.8"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "1.55.0",
     "@tailwindcss/vite": "4.1.13",
     "@testing-library/jest-dom": "6.8.0",
@@ -44,6 +47,7 @@
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "5.0.3",
+    "firebase-tools": "^15.33.0",
     "jsdom": "27.0.0",
     "oxlint": "1.14.0",
     "prettier": "3.6.2",

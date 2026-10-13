@@ -155,6 +155,10 @@ if (process.env.VITEST) {
       await page.goto('/app/settings')
       await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
       await page.getByRole('button', { name: /Reset demo data/i }).click()
+      await page
+        .getByRole('dialog', { name: 'Reset demo data?' })
+        .getByRole('button', { name: 'Reset demo data' })
+        .click()
 
       // resetDemoData closes storage, deletes IndexedDB, then reloads the current route
       await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({

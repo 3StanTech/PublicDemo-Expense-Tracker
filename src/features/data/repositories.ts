@@ -1,6 +1,6 @@
 import { endOfMonth, format, parseISO } from 'date-fns'
 import { DEMO_USER_ID } from '@/demo/seed'
-import { getLocalStore } from '@/data/local-store'
+import { getStore as getLocalStore } from '@/data/store'
 import {
   categorySpending,
   computeAccountBalance,

@@ -1,0 +1,303 @@
+rules_version = '2';
+
+// Fundsicles public demo. Each anonymous visitor owns demos/{uid}: a profile
+// holding a write budget, and a `changes` subcollection of deltas over the
+// seed data the browser ships with. Nothing else is readable or writable.
+//
+// Budget: every batch raises the profile `writes` counter by exactly one
+// (cap 1000), and every change-doc create also raises `docs` by one (cap 500).
+// A change-doc create or update must name itself in the profile's `last`
+// field, so a batch carries at most one change-doc create or update. Deletes
+// need only the `writes` step, so a reset deletes many change docs per batch.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function maxWrites() {
+      return 1000;
+    }
+
+    function maxDocs() {
+      return 500;
+    }
+
+    function stamped(data) {
+      return data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function changeId(id) {
+      return id is string && id.size() <= 100
+        && id.matches('^(profiles|categories|accounts|transactions|budgets|recurringRules|savingsGoals|goalContributions|debts)~[A-Za-z0-9-]{1,64}$');
+    }
+
+    function profileShape(data) {
+      return data.keys().hasOnly(['createdAt', 'updatedAt', 'docs', 'writes', 'last'])
+        && data.keys().hasAll(['createdAt', 'updatedAt', 'docs', 'writes', 'last'])
+        && data.createdAt is timestamp
+        && data.writes is int && data.writes >= 1 && data.writes <= maxWrites()
+        && data.docs is int && data.docs >= 0 && data.docs <= maxDocs()
+        && data.last is string && data.last.size() <= 100;
+    }
+
+    // Record shapes, one per collection, from src/types/domain.ts. Each record
+    // may hold only its own collection's keys, and every value is type-checked
+    // inline (no per-key helper calls, which ran over the rules engine's
+    // per-request evaluation budget). Size bound (target <= 8 KB): notes
+    // <= 2000 UTF-8 bytes; name, payee and displayName <= 500 bytes; every
+    // other string <= 64 characters (<= 256 bytes); numbers and booleans are
+    // fixed size. The largest shape (recurringRules: 13 short strings plus
+    // name, payee and notes) is under 7 KB including key names. Nullable
+    // fields may be null or absent. Update a shape when the domain types change.
+    function profilesRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'displayName', 'currency', 'locale', 'timezone', 'createdAt',
+          'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && (r.get('displayName', null) == null || (r.displayName is string && r.displayName.toUtf8().size() <= 500))
+        && r.currency is string && r.currency.size() <= 64
+        && r.locale is string && r.locale.size() <= 64
+        && r.timezone is string && r.timezone.size() <= 64
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function categoriesRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'name', 'kind', 'color', 'icon',
+          'isArchived', 'createdAt', 'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.name is string && r.name.toUtf8().size() <= 500
+        && r.kind is string && r.kind.size() <= 64
+        && (r.get('color', null) == null || (r.color is string && r.color.size() <= 64))
+        && (r.get('icon', null) == null || (r.icon is string && r.icon.size() <= 64))
+        && r.isArchived is bool
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function accountsRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'name', 'type', 'currency', 'openingBalanceMinor',
+          'isArchived', 'archivedAt', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.name is string && r.name.toUtf8().size() <= 500
+        && r.type is string && r.type.size() <= 64
+        && r.currency is string && r.currency.size() <= 64
+        && r.openingBalanceMinor is int
+        && r.isArchived is bool
+        && (r.get('archivedAt', null) == null || (r.archivedAt is string && r.archivedAt.size() <= 64))
+        && (r.get('notes', null) == null || (r.notes is string && r.notes.toUtf8().size() <= 2000))
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function transactionsRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'kind', 'status', 'amountMinor', 'occurredOn',
+          'accountId', 'transferAccountId', 'categoryId', 'payee', 'notes', 'recurringRuleId',
+          'createdAt', 'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.kind is string && r.kind.size() <= 64
+        && r.status is string && r.status.size() <= 64
+        && r.amountMinor is int
+        && r.occurredOn is string && r.occurredOn.size() <= 64
+        && r.accountId is string && r.accountId.size() <= 64
+        && (r.get('transferAccountId', null) == null || (r.transferAccountId is string && r.transferAccountId.size() <= 64))
+        && (r.get('categoryId', null) == null || (r.categoryId is string && r.categoryId.size() <= 64))
+        && (r.get('payee', null) == null || (r.payee is string && r.payee.toUtf8().size() <= 500))
+        && (r.get('notes', null) == null || (r.notes is string && r.notes.toUtf8().size() <= 2000))
+        && (r.get('recurringRuleId', null) == null || (r.recurringRuleId is string && r.recurringRuleId.size() <= 64))
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function budgetsRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'categoryId', 'month', 'amountMinor', 'createdAt',
+          'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.categoryId is string && r.categoryId.size() <= 64
+        && r.month is string && r.month.size() <= 64
+        && r.amountMinor is int
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function recurringRulesRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'name', 'kind', 'amountMinor', 'accountId',
+          'transferAccountId', 'categoryId', 'payee', 'notes', 'frequency', 'intervalCount',
+          'startDate', 'endDate', 'status', 'lastMaterializedOn', 'createdAt', 'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.name is string && r.name.toUtf8().size() <= 500
+        && r.kind is string && r.kind.size() <= 64
+        && r.amountMinor is int
+        && r.accountId is string && r.accountId.size() <= 64
+        && (r.get('transferAccountId', null) == null || (r.transferAccountId is string && r.transferAccountId.size() <= 64))
+        && (r.get('categoryId', null) == null || (r.categoryId is string && r.categoryId.size() <= 64))
+        && (r.get('payee', null) == null || (r.payee is string && r.payee.toUtf8().size() <= 500))
+        && (r.get('notes', null) == null || (r.notes is string && r.notes.toUtf8().size() <= 2000))
+        && r.frequency is string && r.frequency.size() <= 64
+        && r.intervalCount is int
+        && r.startDate is string && r.startDate.size() <= 64
+        && (r.get('endDate', null) == null || (r.endDate is string && r.endDate.size() <= 64))
+        && r.status is string && r.status.size() <= 64
+        && (r.get('lastMaterializedOn', null) == null || (r.lastMaterializedOn is string && r.lastMaterializedOn.size() <= 64))
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function savingsGoalsRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'name', 'targetAmountMinor', 'currentAmountMinor', 'targetDate',
+          'notes', 'isArchived', 'createdAt', 'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.name is string && r.name.toUtf8().size() <= 500
+        && r.targetAmountMinor is int
+        && r.currentAmountMinor is int
+        && (r.get('targetDate', null) == null || (r.targetDate is string && r.targetDate.size() <= 64))
+        && (r.get('notes', null) == null || (r.notes is string && r.notes.toUtf8().size() <= 2000))
+        && r.isArchived is bool
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    function goalContributionsRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'goalId', 'amountMinor', 'contributedOn', 'notes',
+          'createdAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.goalId is string && r.goalId.size() <= 64
+        && r.amountMinor is int
+        && r.contributedOn is string && r.contributedOn.size() <= 64
+        && (r.get('notes', null) == null || (r.notes is string && r.notes.toUtf8().size() <= 2000))
+        && r.createdAt is string && r.createdAt.size() <= 64;
+    }
+
+    function debtsRecord(r) {
+      return r.keys().hasOnly([
+          'id', 'userId', 'name', 'accountId', 'originalPrincipalMinor', 'interestBps',
+          'minimumPaymentMinor', 'dueDay', 'notes', 'isActive', 'createdAt', 'updatedAt'
+        ])
+        && r.id is string && r.id.size() <= 64
+        && r.userId is string && r.userId.size() <= 64
+        && r.name is string && r.name.toUtf8().size() <= 500
+        && r.accountId is string && r.accountId.size() <= 64
+        && r.originalPrincipalMinor is int
+        && r.interestBps is int
+        && r.minimumPaymentMinor is int
+        && r.dueDay is int
+        && (r.get('notes', null) == null || (r.notes is string && r.notes.toUtf8().size() <= 2000))
+        && r.isActive is bool
+        && r.createdAt is string && r.createdAt.size() <= 64
+        && r.updatedAt is string && r.updatedAt.size() <= 64;
+    }
+
+    // Exactly one shape is evaluated, chosen by the change doc's collection
+    // (changeId() has already limited it to the nine names).
+    function recordShape(c, r) {
+      return r is map
+        && ((c == 'profiles' && profilesRecord(r))
+        || (c == 'categories' && categoriesRecord(r))
+        || (c == 'accounts' && accountsRecord(r))
+        || (c == 'transactions' && transactionsRecord(r))
+        || (c == 'budgets' && budgetsRecord(r))
+        || (c == 'recurringRules' && recurringRulesRecord(r))
+        || (c == 'savingsGoals' && savingsGoalsRecord(r))
+        || (c == 'goalContributions' && goalContributionsRecord(r))
+        || (c == 'debts' && debtsRecord(r)));
+    }
+
+    // A change doc is `{ collection, deleted, record, updatedAt }`, with
+    // `record` absent when `deleted` is true. The ID is collection~id.
+    function changeShape(id) {
+      let data = request.resource.data;
+      let parts = id.split('~');
+      return changeId(id)
+        && data.collection == parts[0]
+        && stamped(data)
+        && data.deleted is bool
+        && (data.deleted
+          ? data.keys().hasOnly(['collection', 'deleted', 'updatedAt'])
+            && data.keys().hasAll(['collection', 'deleted', 'updatedAt'])
+          : data.keys().hasOnly(['collection', 'deleted', 'record', 'updatedAt'])
+            && data.keys().hasAll(['collection', 'deleted', 'record', 'updatedAt'])
+            && recordShape(data.collection, data.record)
+            && (!('id' in data.record) || data.record.id == parts[1]));
+    }
+
+    function profilePath(uid) {
+      return /databases/$(database)/documents/demos/$(uid);
+    }
+
+    // The profile before this batch; a first batch creates it.
+    function priorProfile(uid) {
+      return exists(profilePath(uid)) ? get(profilePath(uid)).data : { 'writes': 0, 'docs': 0 };
+    }
+
+    // The batch raises `writes` by exactly one, within the cap. A create or
+    // update also names this document in `last` (one per batch), and a create
+    // raises `docs` by exactly one, within the cap.
+    function budgeted(uid, id, isCreate) {
+      let prior = priorProfile(uid);
+      let after = getAfter(profilePath(uid)).data;
+      return after.writes is int && after.writes == prior.writes + 1
+        && after.writes <= maxWrites()
+        && after.last == id
+        && after.docs is int
+        && after.docs == (isCreate ? prior.docs + 1 : prior.docs)
+        && after.docs <= maxDocs();
+    }
+
+    // A delete only spends one write step; a reset batch deletes many.
+    function deleteCounted(uid) {
+      let after = getAfter(profilePath(uid)).data;
+      return after.writes is int && after.writes == get(profilePath(uid)).data.writes + 1
+        && after.writes <= maxWrites();
+    }
+
+    match /demos/{uid} {
+      // No client delete: deleting and recreating would reset the budget.
+      allow read: if owner(uid);
+      allow create: if owner(uid) && profileShape(request.resource.data)
+        && stamped(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.writes == 1
+        && request.resource.data.docs == 1;
+      allow update: if owner(uid) && profileShape(request.resource.data)
+        && stamped(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.writes == resource.data.writes + 1
+        && request.resource.data.docs >= resource.data.docs
+        && request.resource.data.docs <= resource.data.docs + 1;
+
+      match /changes/{id} {
+        allow read: if owner(uid);
+        allow create: if owner(uid) && changeShape(id) && budgeted(uid, id, true);
+        allow update: if owner(uid) && changeShape(id) && budgeted(uid, id, false);
+        allow delete: if owner(uid) && deleteCounted(uid);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

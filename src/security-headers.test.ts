@@ -4,11 +4,16 @@ import { describe, expect, it } from 'vitest'
 
 const root = resolve(import.meta.dirname, '..')
 
-function headerMapFromVercel(json: {
-  headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>
-}): Record<string, string> {
-  const block = json.headers?.find((h) => h.source === '/(.*)')
-  if (!block) throw new Error('vercel.json missing catch-all headers')
+type FirebaseHosting = {
+  hosting?: {
+    headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>
+    rewrites?: Array<{ source: string; destination: string }>
+  }
+}
+
+function headerMapFromFirebase(json: FirebaseHosting): Record<string, string> {
+  const block = json.hosting?.headers?.find((h) => h.source === '**')
+  if (!block) throw new Error('firebase.json missing catch-all hosting headers')
   return Object.fromEntries(block.headers.map((h) => [h.key, h.value]))
 }
 
@@ -28,16 +33,12 @@ function headerMapFromNetlify(toml: string): Record<string, string> {
 }
 
 describe('host security headers parity', () => {
-  it('emits identical anti-framing and baseline SPA headers on Vercel and Netlify', () => {
-    const vercel = headerMapFromVercel(
-      JSON.parse(readFileSync(resolve(root, 'vercel.json'), 'utf8')) as {
-        headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>
-      },
-    )
+  it('emits the same anti-framing and baseline SPA headers on Firebase Hosting and Netlify', () => {
+    const firebaseJson = JSON.parse(readFileSync(resolve(root, 'firebase.json'), 'utf8')) as FirebaseHosting
+    const firebase = headerMapFromFirebase(firebaseJson)
     const netlify = headerMapFromNetlify(readFileSync(resolve(root, 'netlify.toml'), 'utf8'))
 
     const expected = {
-      'Content-Security-Policy': "frame-ancestors 'none'",
       'X-Frame-Options': 'DENY',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -46,8 +47,13 @@ describe('host security headers parity', () => {
     }
 
     for (const [key, value] of Object.entries(expected)) {
-      expect(vercel[key], `vercel ${key}`).toBe(value)
+      expect(firebase[key], `firebase ${key}`).toBe(value)
       expect(netlify[key], `netlify ${key}`).toBe(value)
     }
+
+    // Firebase carries the full app CSP; both hosts forbid framing.
+    expect(firebase['Content-Security-Policy']).toContain("frame-ancestors 'none'")
+    expect(netlify['Content-Security-Policy']).toBe("frame-ancestors 'none'")
+    expect(firebaseJson.hosting?.rewrites).toContainEqual({ source: '**', destination: '/index.html' })
   })
 })

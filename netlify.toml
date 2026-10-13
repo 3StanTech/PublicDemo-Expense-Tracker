@@ -1,11 +1,15 @@
+# Redirect-only site: the demo now runs on Firebase Hosting. Netlify serves
+# only the short notice in netlify/ and forwards every path to the same path
+# on the Firebase host. No npm build runs here.
 [build]
-  command = "npm ci && npm run build"
-  publish = "dist"
+  command = ""
+  publish = "netlify"
 
 [[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  to = "https://fundsicles-demo.web.app/:splat"
+  status = 301
+  force = true
 
 [[headers]]
   for = "/*"
