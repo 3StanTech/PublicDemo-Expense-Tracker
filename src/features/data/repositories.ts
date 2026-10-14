@@ -1,6 +1,6 @@
 import { endOfMonth, format, parseISO } from 'date-fns'
 import { DEMO_USER_ID } from '@/demo/seed'
-import { getStore as getLocalStore } from '@/data/store'
+import { getStore as getLocalStore, getWriteStore } from '@/data/store'
 import {
   categorySpending,
   computeAccountBalance,
@@ -99,7 +99,7 @@ export async function fetchProfile(): Promise<Profile | null> {
 }
 
 export async function updateProfile(displayName: string | null): Promise<Profile> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('profiles', DEMO_USER_ID)
   if (!current) throw new Error('Profile not found')
   return store.put('profiles', {
@@ -120,7 +120,7 @@ export async function createCategory(input: {
   kind: 'income' | 'expense'
   color: string | null
 }): Promise<Category> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const ts = nowIso()
   return store.put('categories', {
     id: newId(),
@@ -136,7 +136,7 @@ export async function createCategory(input: {
 }
 
 export async function archiveCategory(id: string): Promise<void> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('categories', id)
   if (!current) throw new Error('Category not found')
   await store.put('categories', {
@@ -158,7 +158,7 @@ export async function createAccount(input: {
   openingBalanceMinor: number
   notes: string | null
 }): Promise<Account> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const ts = nowIso()
   return store.put('accounts', {
     id: newId(),
@@ -185,7 +185,7 @@ export async function updateAccount(
     isArchived: boolean
   }>,
 ): Promise<Account> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('accounts', id)
   if (!current) throw new Error('Account not found')
   const ts = nowIso()
@@ -248,7 +248,7 @@ export async function createTransaction(input: {
   payee: string | null
   notes: string | null
 }): Promise<Transaction> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const ts = nowIso()
   return store.put('transactions', {
     id: newId(),
@@ -282,7 +282,7 @@ export async function updateTransaction(
     notes: string | null
   },
 ): Promise<Transaction> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('transactions', id)
   if (!current) throw new Error('Transaction not found')
   return store.put('transactions', {
@@ -293,7 +293,7 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   await store.remove('transactions', id)
 }
 
@@ -310,7 +310,7 @@ export async function createBudget(input: {
   month: string
   amountMinor: number
 }): Promise<Budget> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const ts = nowIso()
   return store.put('budgets', {
     id: newId(),
@@ -324,7 +324,7 @@ export async function createBudget(input: {
 }
 
 export async function updateBudget(id: string, amountMinor: number): Promise<Budget> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('budgets', id)
   if (!current) throw new Error('Budget not found')
   return store.put('budgets', {
@@ -335,7 +335,7 @@ export async function updateBudget(id: string, amountMinor: number): Promise<Bud
 }
 
 export async function deleteBudget(id: string): Promise<void> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   await store.remove('budgets', id)
 }
 
@@ -385,7 +385,7 @@ export async function createRecurringRule(input: {
   endDate: string | null
   status: RecurringRule['status']
 }): Promise<RecurringRule> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const ts = nowIso()
   return store.put('recurringRules', {
     id: newId(),
@@ -418,7 +418,7 @@ export async function updateRecurringRule(
     endDate: string | null
   }>,
 ): Promise<RecurringRule> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('recurringRules', id)
   if (!current) throw new Error('Recurring rule not found')
   return store.put('recurringRules', {
@@ -432,7 +432,7 @@ export async function updateRecurringRule(
 }
 
 export async function deleteRecurringRule(id: string): Promise<void> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   await store.remove('recurringRules', id)
 }
 
@@ -447,7 +447,7 @@ export async function materializeRecurring(asOf?: string): Promise<number> {
     throw new Error('asOf cannot be after the current Manila calendar date')
   }
 
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const [rules, txs] = await Promise.all([
     store.list('recurringRules'),
     store.list('transactions'),
@@ -527,7 +527,7 @@ export async function createGoal(input: {
   targetDate: string | null
   notes: string | null
 }): Promise<SavingsGoal> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const ts = nowIso()
   return store.put('savingsGoals', {
     id: newId(),
@@ -553,7 +553,7 @@ export async function updateGoal(
     isArchived: boolean
   }>,
 ): Promise<SavingsGoal> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('savingsGoals', id)
   if (!current) throw new Error('Goal not found')
   return store.put('savingsGoals', {
@@ -573,7 +573,7 @@ export async function addContribution(input: {
   contributedOn: string
   notes: string | null
 }): Promise<GoalContribution> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const goal = await store.get('savingsGoals', input.goalId)
   if (!goal) throw new Error('Goal not found')
 
@@ -611,7 +611,7 @@ export async function createDebt(input: {
   dueDay: number
   notes: string | null
 }): Promise<Debt> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const account = await store.get('accounts', input.accountId)
   if (!account) throw new Error('Liability account not found')
   if (!isLiabilityType(account.type)) {
@@ -646,7 +646,7 @@ export async function updateDebt(
     isActive: boolean
   }>,
 ): Promise<Debt> {
-  const store = await getLocalStore()
+  const store = await getWriteStore()
   const current = await store.get('debts', id)
   if (!current) throw new Error('Debt not found')
   return store.put('debts', {

@@ -70,6 +70,13 @@ class DeferredFirestoreStore implements DemoStore {
     return row ? structuredClone(row) : null
   }
 
+  /** The real store once it is loaded and ready to accept writes. */
+  async writable(): Promise<DemoStore> {
+    const real = await this.loading
+    await real.ready
+    return real
+  }
+
   async put<C extends LocalCollection>(
     collection: C,
     entity: LocalEntityByCollection[C],
@@ -170,7 +177,7 @@ class DeferredFirestoreStore implements DemoStore {
   }
 }
 
-let store: DemoStore | null = null
+let store: DeferredFirestoreStore | null = null
 
 /**
  * The app's store: Firestore in the browser build, the local store under
@@ -181,6 +188,17 @@ export function getStore(): Promise<DemoStore> {
   if (import.meta.env.MODE === 'test') return getLocalStore()
   store ??= new DeferredFirestoreStore()
   return Promise.resolve(store)
+}
+
+/**
+ * The store for mutations: resolves once the real store is loaded and ready,
+ * so a read-modify-write never reads the sample data that stands in while the
+ * Firebase chunk downloads. Display reads keep using getStore().
+ */
+export function getWriteStore(): Promise<DemoStore> {
+  if (import.meta.env.MODE === 'test') return getLocalStore()
+  store ??= new DeferredFirestoreStore()
+  return store.writable()
 }
 
 /** Closes the open store and drops the singleton so the next getStore() recreates it. */
