@@ -266,7 +266,9 @@ service cloud.firestore {
         && after.docs <= maxDocs();
     }
 
-    // A delete only spends one write step; a reset batch deletes many.
+    // A delete only spends one write step; a reset batch deletes many. Each
+    // delete must name an existing change doc, so deletes stay bounded by the
+    // docs the visitor created.
     function deleteCounted(uid) {
       let after = getAfter(profilePath(uid)).data;
       return after.writes is int && after.writes == get(profilePath(uid)).data.writes + 1
@@ -292,7 +294,7 @@ service cloud.firestore {
         allow read: if owner(uid);
         allow create: if owner(uid) && changeShape(id) && budgeted(uid, id, true);
         allow update: if owner(uid) && changeShape(id) && budgeted(uid, id, false);
-        allow delete: if owner(uid) && deleteCounted(uid);
+        allow delete: if owner(uid) && resource != null && deleteCounted(uid);
       }
     }
 

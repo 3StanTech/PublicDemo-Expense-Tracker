@@ -1,6 +1,7 @@
 # Quality gate: lint, typecheck, unit tests, production build, bundle budget,
 # public-safety, Firestore rules (emulator) and Playwright smoke.
-# No repository secrets required.
+# No repository secrets required. The Hosting deploy workflows also call it, so
+# nothing deploys unless it passes.
 name: quality
 
 on:
@@ -8,6 +9,7 @@ on:
   push:
     branches:
       - main
+  workflow_call:
 
 permissions:
   contents: read
@@ -63,7 +65,7 @@ jobs:
       # Auth and Firestore emulators with firestore.rules, no App Check and no
       # live sign-ups.
       - name: E2E smoke (emulators)
-        run: npm run test:e2e:emulators
+        run: npm run test:e2e
 
       - name: Upload Playwright report
         if: failure()

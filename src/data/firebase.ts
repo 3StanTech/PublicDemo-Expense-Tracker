@@ -1,4 +1,4 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app'
+import { initializeApp, onLog, type FirebaseApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth, signInAnonymously, type Auth } from 'firebase/auth'
 import {
@@ -48,6 +48,36 @@ export type FirebaseServices = { app: FirebaseApp; auth: Auth; db: Firestore }
 
 let services: FirebaseServices | null = null
 let signIn: Promise<string> | null = null
+let memoryCache = false
+const memoryCacheListeners = new Set<() => void>()
+
+/**
+ * Calls `listener` once Firestore reports that it could not open its IndexedDB
+ * cache and fell back to a memory cache (immediately if it already has). The
+ * SDK exposes that outcome only as a warning through its logger, so this
+ * watches the logger; nothing else tells the app which cache is in use.
+ */
+export function onMemoryCacheFallback(listener: () => void): () => void {
+  if (memoryCache) {
+    listener()
+    return () => {}
+  }
+  memoryCacheListeners.add(listener)
+  return () => memoryCacheListeners.delete(listener)
+}
+
+function watchCacheFallback(): void {
+  onLog(
+    ({ type, message }) => {
+      if (memoryCache || type !== '@firebase/firestore') return
+      if (!message.includes('Falling back to memory cache')) return
+      memoryCache = true
+      for (const listener of memoryCacheListeners) listener()
+      memoryCacheListeners.clear()
+    },
+    { level: 'warn' },
+  )
+}
 
 function isLocalHost(hostname: string): boolean {
   return (
@@ -81,6 +111,7 @@ export function getFirebase(): FirebaseServices {
     })
   }
   const auth = getAuth(app)
+  watchCacheFallback()
   const db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     ignoreUndefinedProperties: true,

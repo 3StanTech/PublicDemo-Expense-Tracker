@@ -2,7 +2,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const isCI = Boolean(process.env.CI)
-// Set by `npm run test:e2e:emulators`: the build then talks to the local Auth and
+// Set by `npm run test:e2e` (emulators): the build then talks to the local Auth and
 // Firestore emulators, so never reuse a preview built without it.
 const useEmulators = process.env.VITE_FIREBASE_EMULATORS === '1'
 const port = 4173

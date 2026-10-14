@@ -13,7 +13,7 @@ import {
   type QuerySnapshot,
   type Unsubscribe,
 } from 'firebase/firestore'
-import { getFirebase, signInVisitor, storedVisitorId } from '@/data/firebase'
+import { getFirebase, onMemoryCacheFallback, signInVisitor, storedVisitorId } from '@/data/firebase'
 import {
   LOCAL_COLLECTIONS,
   seedRows,
@@ -81,31 +81,6 @@ function compareIds(a: { id: string }, b: { id: string }): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
-/**
- * Whether this browser can keep Firestore's cache in IndexedDB. When it cannot,
- * the SDK falls back to a memory cache and unsent changes are lost on reload.
- */
-function probePersistence(): Promise<Persistence> {
-  return new Promise((resolve) => {
-    if (typeof indexedDB === 'undefined') {
-      resolve('memory')
-      return
-    }
-    try {
-      const name = 'fundsicles-persistence-probe'
-      const request = indexedDB.open(name)
-      request.addEventListener('success', () => {
-        request.result.close()
-        indexedDB.deleteDatabase(name)
-        resolve('device')
-      })
-      request.addEventListener('error', () => resolve('memory'))
-    } catch {
-      resolve('memory')
-    }
-  })
-}
-
 function isBrowserOffline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false
 }
@@ -151,6 +126,7 @@ export class FirestoreStore implements DemoStore {
   private hasPendingWrites = false
   private error: string | null = null
   private persistence: Persistence = 'device'
+  private readonly stopCacheWatch: () => void
   private status: SyncStatus = {
     state: 'loading',
     hasPendingWrites: false,
@@ -172,8 +148,11 @@ export class FirestoreStore implements DemoStore {
     }
     this.readyPromise = this.startReady()
     void this.loadCachedChanges()
-    void probePersistence().then((persistence) => {
-      this.persistence = persistence
+    // 'device' until Firestore itself reports falling back to a memory cache
+    // (IndexedDB blocked, out of quota or an incompatible cache); unsent changes
+    // are then lost on reload.
+    this.stopCacheWatch = onMemoryCacheFallback(() => {
+      this.persistence = 'memory'
       this.updateStatus()
     })
     if (typeof window !== 'undefined') {
@@ -298,6 +277,7 @@ export class FirestoreStore implements DemoStore {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.stopCacheWatch()
     this.detach()
     this.dataListeners.clear()
     this.statusListeners.clear()
