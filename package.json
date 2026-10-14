@@ -15,8 +15,8 @@
     "test": "vitest run --exclude \"tests/rules/**\"",
     "test:watch": "vitest --exclude \"tests/rules/**\"",
     "test:rules": "firebase emulators:exec --only firestore --project demo-fundsicles-rules \"vitest run -c vitest.rules.config.ts\"",
-    "test:e2e": "playwright test",
-    "test:e2e:emulators": "firebase emulators:exec --only auth,firestore --project demo-fundsicles-e2e \"VITE_FIREBASE_EMULATORS=1 playwright test\"",
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-fundsicles-e2e \"VITE_FIREBASE_EMULATORS=1 playwright test\"",
+    "test:e2e:live": "playwright test",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:public-safe": "node scripts/check-public-safe.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundle && npm run check:public-safe && npm run test:e2e"

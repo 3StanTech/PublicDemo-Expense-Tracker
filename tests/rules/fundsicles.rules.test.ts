@@ -321,6 +321,25 @@ describe('own visitor', () => {
     const profile = (await getDoc(doc(db, PROFILE))).data()
     expect(profile).toMatchObject({ writes: 111, docs: ids.length })
   })
+
+  it('denies deleting a missing or already-deleted change doc, alone or inside a reset batch', async () => {
+    await seedProfile(10, 2)
+    await seedChange(TX)
+    const db = visitor()
+    const resetBatch = (ids: string[]) => {
+      const batch = writeBatch(db)
+      for (const id of ids) batch.delete(doc(db, changePath(id)))
+      batch.update(doc(db, PROFILE), { writes: increment(1), updatedAt: serverTimestamp() })
+      return batch.commit()
+    }
+    await assertFails(resetBatch(['transactions~never-written']))
+    await assertFails(resetBatch([TX, 'transactions~never-written']))
+    expect(await exists(changePath(TX))).toBe(true)
+    await assertSucceeds(resetBatch([TX]))
+    await assertFails(resetBatch([TX]))
+    const profile = (await getDoc(doc(db, PROFILE))).data()
+    expect(profile).toMatchObject({ writes: 11, docs: 2 })
+  })
 })
 
 describe.each(COLLECTIONS)('full %s record', (name) => {
