@@ -42,7 +42,8 @@ export const accountFormSchema = z.object({
 })
 
 const optionalUuid = z
-  .union([uuidSchema, z.literal(''), z.null(), z.undefined()])
+  .union([uuidSchema, z.literal(''), z.null()])
+  .optional()
   .transform((v) => (v ? v : null))
 
 export const transactionFormSchema = z
@@ -110,7 +111,8 @@ export const recurringFormSchema = z
     intervalCount: z.coerce.number().int().min(1).max(365),
     startDate: isoDateSchema,
     endDate: z
-      .union([isoDateSchema, z.literal(''), z.null(), z.undefined()])
+      .union([isoDateSchema, z.literal(''), z.null()])
+      .optional()
       .transform((v) => (v ? v : null)),
     status: recurrenceStatusSchema.default('active'),
   })
