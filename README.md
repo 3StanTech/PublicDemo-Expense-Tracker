@@ -37,7 +37,7 @@ The Firebase web config in `src/data/firebase.ts` is public by design. It identi
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 24 (the version in `.nvmrc`, which CI also uses)
 - npm
 - Java 21 for the Firebase emulators (`npm run test:rules`, `npm run test:e2e` and `npm run check`)
 
@@ -79,7 +79,7 @@ npm run preview
 
 ## Hosting
 
-- **Firebase Hosting** (`firebase.json`): serves `dist`, rewrites all paths to `index.html`, and sets security headers including a Content Security Policy. Merges to `main` deploy to the live site, and each pull request gets a preview channel. Both run the full quality workflow first and deploy only if it passes, then build with `npm ci && npm run build`.
+- **Firebase Hosting** (`firebase.json`): serves `dist`, rewrites all paths to `index.html`, and sets security headers including a Content Security Policy. Merges to `main` deploy to the live site. Pull requests from this repository get a preview channel, except those opened by Dependabot; pull requests from forks get none. Both run the full quality workflow first and deploy only if it passes, then build with `npm ci && npm run build`.
 - **CI** (`.github/workflows/quality.yml`): lint, typecheck, unit tests, build, bundle budget, public-safety scan, the rules suite, and the emulator e2e smoke on every pull request and push to `main`.
 - **Netlify** (`netlify.toml`, `netlify/`): redirect-only. The old Netlify URL forwards every path, with query string, to the same path on `fundsicles-demo.web.app` (301). Netlify runs no build.
 - **Vercel:** not used for this demo.
